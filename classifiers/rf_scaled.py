@@ -26,5 +26,5 @@ class RFScaled(ABSClassifier):
         if self.is_trained is False:
             print("WARN: RFScaled was not trained but predict was called")
 
-        X_scaled = self.scaler.fit_transform(X)
+        X_scaled = self.scaler.transform(X)
         return self.clf.predict(X_scaled)

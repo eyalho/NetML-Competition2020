@@ -12,7 +12,7 @@ class TabNetScaled(ABSClassifier):
 
     def train(self, X_train, X_val, y_train, y_val):
         X_train_scaled = self.scaler.fit_transform(X_train)
-        X_val_scaled = self.scaler.fit_transform(X_val)
+        X_val_scaled = self.scaler.transform(X_val)
         self.clf.fit(X_train_scaled, y_train, eval_set=[(X_val_scaled, y_val)])
         self.is_trained = True
 
@@ -20,5 +20,5 @@ class TabNetScaled(ABSClassifier):
         if self.is_trained is False:
             print("WARN: RFScaled was not trained but predict was called")
 
-        X_scaled = self.scaler.fit_transform(X)
+        X_scaled = self.scaler.transform(X)
         return self.clf.predict(X_scaled)
