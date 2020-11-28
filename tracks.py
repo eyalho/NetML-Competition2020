@@ -1,12 +1,13 @@
 import os
 import time as t
+from collections import Counter
 
 import numpy as np
 import pandas as pd
-from sklearn import preprocessing
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
+from classifiers.abs_classifier import ABSClassifier
+from classifiers.tabnet_scaled import TabNetScaled
 from utils.helper import get_submission_data, make_submission, plot_confusion_matrix, read_dataset
 
 
@@ -59,51 +60,58 @@ class Track:
         self.Xtrain_ids = ids
         self.training_df = training_df
 
+        self.counter_by_label_idx = dict(Counter(self.ytrain))
+        self.counter_by_label_str = dict()
+        for label_str, label_idx in self.class_label_pair.items():  # for name, age in dictionary.iteritems():  (for Python 2.x)
+            self.counter_by_label_str[label_str] = self.counter_by_label_idx[label_idx]
+
         self.class_names_list = list(sorted(self.class_label_pair.keys()))
-        print(f"classes:{self.class_names_list}")
+
+        print("Loaded the dataset with:")
+        for label_str, count in self.counter_by_label_str.items():
+            print(f"{label_str}: {count}")
 
     def get_training_data(self):
         return self.Xtrain, self.ytrain, self.class_label_pair, self.Xtrain_ids
 
-    def run_model_and_save_resutls(self, classifier=None):
-        if classifier is None:
-            classifier = RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42, n_jobs=-1,
-                                                max_features="auto")
+    def submit_test_std(self, classifier, save_dir):
+        self._submit(classifier, self.test_set, self.class_label_pair, save_dir + "/submission_test-std.json")
+
+    def submit_test_challenge(self, classifier, save_dir):
+        self._submit(classifier, self.challenge_set, self.class_label_pair,
+                     save_dir + "/submission_test-challenge.json")
+
+    def _submit(self, classifier, test_set, class_label_pair, filepath):
+        print("Predicting on {} ...".format(test_set.split('/')[-1]))
+        Xtest, ids = get_submission_data(test_set)
+        predictions = classifier.predict(Xtest)
+        make_submission(predictions, ids, class_label_pair, filepath)
+
+    def train_classifier_and_save_training_results(self, classifier: ABSClassifier):
 
         # Split validation set from training data
         X_train, X_val, y_train, y_val = train_test_split(self.Xtrain, self.ytrain,
                                                           test_size=0.2,
                                                           random_state=42,
                                                           stratify=self.ytrain)
-
-        # Preprocess the data
-        scaler = preprocessing.StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_val_scaled = scaler.transform(X_val)
-
-        # Train classifier Model
         print("Training the model ...")
-        classifier.fit(X_train_scaled, y_train)
-        # classifier.fit(X_train, y_train, eval_set=[(X_val, y_val)])
-
-        # Output accuracy of classifier
-        try:
-            print("Training Score: \t{:.5f}".format(classifier.score(X_train_scaled, y_train)))
-            print("Validation Score: \t{:.5f}".format(classifier.score(X_val_scaled, y_val)))
-        except AttributeError:
-            pass
+        classifier.train(X_train, X_val, y_train, y_val)
 
         # Create folder for the results
         time_ = t.strftime("%Y%m%d-%H%M%S")
-        save_dir = os.path.join(os.getcwd(), 'results', f"_{self.dataset_name}_{self.anno_level}", time_)
+        save_dir = os.path.join(os.getcwd(), 'results', f"_{self.dataset_name}_{self.anno_level}",
+                                f"{classifier.__class__.__name__}_{time_}")
         os.makedirs(save_dir)
 
         # Plot normalized confusion matrix
-        ypred = classifier.predict(X_val_scaled)
+        ypred = classifier.predict(X_val)
         np.set_printoptions(precision=2)
         plot_confusion_matrix(directory=save_dir, y_true=y_val, y_pred=ypred,
                               classes=self.class_names_list,
                               normalize=False)
+
+        self.submit_test_challenge(classifier, save_dir)
+        self.submit_test_challenge(classifier, save_dir)
 
     def plot_single_feature_distribution(self):
         pass
@@ -112,22 +120,20 @@ class Track:
         pass
 
 
-def submit(clf, test_set, scaler, class_label_pair, filepath):
-    Xtest, ids = get_submission_data(test_set)
-    X_test_scaled = scaler.transform(Xtest)
-    print("Predicting on {} ...".format(test_set.split('/')[-1]))
-    predictions = clf.predict(X_test_scaled)
-    make_submission(predictions, ids, class_label_pair, filepath)
-
-
 def main():
+    # from pytorch_tabnet.tab_model import TabNetClassifier
+    # clf = TabNetClassifier()
+    track = Track("vpn2016", "top")
+    classifier = TabNetScaled()
+    track.train_classifier_and_save_training_results(classifier)
+
     for dataset in Track.DATASETS_NAMES:
         for level in Track.ANNO_LEVELS:
             if level == Track.ANNO_LEVELS[1] and dataset != Track.DATASETS_NAMES[2]:
                 continue
             print(dataset, level)
             track = Track(dataset, level)
-            track.run_model_and_save_resutls(classifier=None)
+            track.train_classifier_and_save_training_results(classifier=classifier)
 
 
 if __name__ == "__main__":
