@@ -18,9 +18,6 @@ logging.basicConfig(level=logging.INFO,
                     filename="records.log")
 
 
-# logging.basicConfig(level=logging.INFO, file="records.log", format='%(asctime)s :: %(levelname)s :: %(message)s')
-
-
 class Track:
     DATASETS_NAMES = ["cic2017", "netml", "vpn2016"]
     ANNO_LEVELS = ["top", "mid", "fine"]
@@ -129,7 +126,6 @@ class Track:
         save_dir = os.path.join(os.getcwd(), 'results', f"_{self.dataset_name}_{self.anno_level}",
                                 f"{classifier.__class__.__name__}_{time_}")
         os.makedirs(save_dir)
-
         # Plot normalized confusion matrix
         ypred = classifier.predict(X_val)
         np.set_printoptions(precision=2)
@@ -145,7 +141,10 @@ class Track:
         logging.info(
             f"{exp_signature}::features ({len(list(self.training_df.columns))}):: {list(self.training_df.columns)}")
 
-        self.submit_test_challenge(classifier, save_dir)
+        with open(os.path.join(save_dir, "score.txt"), 'w') as f:
+            f.write(f"{exp_signature}::result::{ax.title}")
+
+        self.submit_test_std(classifier, save_dir)
         self.submit_test_challenge(classifier, save_dir)
 
     def plot_single_feature_distribution(self):

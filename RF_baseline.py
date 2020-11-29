@@ -10,6 +10,7 @@ from sklearn import preprocessing
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
+from xgboost import XGBClassifier
 
 from utils.helper import *
 
@@ -72,7 +73,8 @@ def main ():
 
     # Train RF Model
     print("Training the model ...")
-    clf = RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42, n_jobs = -1, max_features="auto")
+    # clf = RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42, n_jobs = -1, max_features="auto")
+    clf = XGBClassifier()
     clf.fit(X_train_scaled, y_train)
 
     # Output accuracy of classifier
