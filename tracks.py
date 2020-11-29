@@ -1,3 +1,4 @@
+import logging
 import os
 import time as t
 from collections import Counter
@@ -7,18 +8,31 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from classifiers.abs_classifier import ABSClassifier
-from classifiers.tabnet_scaled import TabNetScaled
-from utils.helper import get_submission_data, make_submission, plot_confusion_matrix, read_dataset
+from features_extraction.abs_features_extraction import ABSFeatureExtraction
+from features_extraction.extraction_v1_features import ExtractionV1Features
+from features_extraction.hist_remover_features import HistRemoverFeatures
+from features_extraction.regular_features import RegularFeatures
+from utils.helper import make_submission, plot_confusion_matrix, read_dataset
+
+logging.basicConfig(level=logging.INFO, filename="records.log")
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(message)s',
+                    datefmt='%m-%d %H:%M',
+                    filename="records.log")
+
+
+# logging.basicConfig(level=logging.INFO, file="records.log", format='%(asctime)s :: %(levelname)s :: %(message)s')
 
 
 class Track:
     DATASETS_NAMES = ["cic2017", "netml", "vpn2016"]
     ANNO_LEVELS = ["top", "mid", "fine"]
 
-    def __init__(self, dataset_name: str, anno_level: str):
+    def __init__(self, dataset_name: str, anno_level: str, features_extraction: ABSFeatureExtraction):
 
         self.dataset_name = dataset_name
         self.anno_level = anno_level
+        self.features_extraction = features_extraction
 
         if anno_level not in self.ANNO_LEVELS:
             raise ValueError(f"{anno_level} not in {self.ANNO_LEVELS}")
@@ -52,7 +66,7 @@ class Track:
         training_df = pd.DataFrame(data=training_data,  # values
                                    index=[i for i in range(training_data.shape[0])],  # 1st column as index
                                    columns=training_feature_names)  # 1st row as the column names
-        Xtrain = training_df.values
+        Xtrain = features_extraction.extract(training_df)
 
         self.Xtrain = Xtrain
         self.ytrain = training_label
@@ -83,9 +97,24 @@ class Track:
 
     def _submit(self, classifier, test_set, class_label_pair, filepath):
         print("Predicting on {} ...".format(test_set.split('/')[-1]))
-        Xtest, ids = get_submission_data(test_set)
+        Xtest, ids = self._get_submission_data(test_set)
         predictions = classifier.predict(Xtest)
         make_submission(predictions, ids, class_label_pair, filepath)
+
+    def _get_submission_data(self, test_set):
+        # Read test set from json files
+        print("Loading submission set ...")
+        test_feature_names, ids, test_data, _, _, = read_dataset(test_set)
+
+        # Convert np.array to dataframe for easy manipulations
+        test_df = pd.DataFrame(data=test_data,  # values
+                               index=[i for i in range(test_data.shape[0])],  # 1st column as index
+                               columns=test_feature_names)  # 1st row as the column names
+
+        # Get np.array for Xtest
+        Xtest = self.features_extraction.extract(test_df)
+
+        return Xtest, ids
 
     def train_classifier_and_save_training_results(self, classifier: ABSClassifier):
 
@@ -95,6 +124,9 @@ class Track:
                                                           random_state=42,
                                                           stratify=self.ytrain)
         print("Training the model ...")
+        print(f"iscontain NAN, {np.isnan(X_train).any()}")
+        print(f"iscontain infinity, {np.isinf(X_train).any()}")
+
         classifier.train(X_train, X_val, y_train, y_val)
 
         # Create folder for the results
@@ -106,9 +138,17 @@ class Track:
         # Plot normalized confusion matrix
         ypred = classifier.predict(X_val)
         np.set_printoptions(precision=2)
-        plot_confusion_matrix(directory=save_dir, y_true=y_val, y_pred=ypred,
-                              classes=self.class_names_list,
-                              normalize=False)
+        ax, cm = plot_confusion_matrix(directory=save_dir, y_true=y_val, y_pred=ypred,
+                                       classes=self.class_names_list,
+                                       normalize=False)
+
+        print("ax.title", ax.title)
+        exp_signature = f"{self.dataset_name}, {self.anno_level}, {self.features_extraction.__class__.__name__}," \
+                        f" {classifier.__class__.__name__}"
+
+        logging.info(f"{exp_signature}::result::{ax.title}")
+        logging.info(
+            f"{exp_signature}::features ({len(list(self.training_df.columns))}):: {list(self.training_df.columns)}")
 
         self.submit_test_challenge(classifier, save_dir)
         self.submit_test_challenge(classifier, save_dir)
@@ -121,19 +161,19 @@ class Track:
 
 
 def main():
-    # from pytorch_tabnet.tab_model import TabNetClassifier
-    # clf = TabNetClassifier()
-    track = Track("vpn2016", "top")
-    classifier = TabNetScaled()
-    track.train_classifier_and_save_training_results(classifier)
+    from classifiers.rf_scaled import RFScaled
+    from classifiers.tabnet_scaled import TabNetScaled
 
-    for dataset in Track.DATASETS_NAMES:
-        for level in Track.ANNO_LEVELS:
-            if level == Track.ANNO_LEVELS[1] and dataset != Track.DATASETS_NAMES[2]:
-                continue
-            print(dataset, level)
-            track = Track(dataset, level)
-            track.train_classifier_and_save_training_results(classifier=classifier)
+    classifiers = [RFScaled(), TabNetScaled()]
+    for classifier in classifiers:
+        for dataset in Track.DATASETS_NAMES[::-1]:
+            for level in Track.ANNO_LEVELS[::-1]:
+                for fe in [ExtractionV1Features(), HistRemoverFeatures(), RegularFeatures()]:
+                    if level == Track.ANNO_LEVELS[1] and dataset != Track.DATASETS_NAMES[2]:
+                        continue
+                    print(dataset, level)
+                    track = Track(dataset, level, fe)
+                    track.train_classifier_and_save_training_results(classifier=classifier)
 
 
 if __name__ == "__main__":
