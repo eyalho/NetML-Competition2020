@@ -9,9 +9,6 @@ from sklearn.model_selection import train_test_split
 
 from classifiers.abs_classifier import ABSClassifier
 from features_extraction.abs_features_extraction import ABSFeatureExtraction
-from features_extraction.extraction_v1_features import ExtractionV1Features
-from features_extraction.hist_remover_features import HistRemoverFeatures
-from features_extraction.regular_features import RegularFeatures
 from utils.helper import make_submission, plot_confusion_matrix, read_dataset
 
 logging.basicConfig(level=logging.INFO, filename="records.log")
@@ -124,8 +121,6 @@ class Track:
                                                           random_state=42,
                                                           stratify=self.ytrain)
         print("Training the model ...")
-        print(f"iscontain NAN, {np.isnan(X_train).any()}")
-        print(f"iscontain infinity, {np.isinf(X_train).any()}")
 
         classifier.train(X_train, X_val, y_train, y_val)
 
@@ -163,17 +158,37 @@ class Track:
 def main():
     from classifiers.rf_scaled import RFScaled
     from classifiers.tabnet_scaled import TabNetScaled
+    from classifiers.xgboost_scaled import XGBoostScaled
+    from classifiers.xgboost_not_scaled import XGBoostNotScaled
 
-    classifiers = [RFScaled(), TabNetScaled()]
-    for classifier in classifiers:
-        for dataset in Track.DATASETS_NAMES[::-1]:
-            for level in Track.ANNO_LEVELS[::-1]:
-                for fe in [ExtractionV1Features(), HistRemoverFeatures(), RegularFeatures()]:
-                    if level == Track.ANNO_LEVELS[1] and dataset != Track.DATASETS_NAMES[2]:
-                        continue
-                    print(dataset, level)
-                    track = Track(dataset, level, fe)
-                    track.train_classifier_and_save_training_results(classifier=classifier)
+    from features_extraction.extraction_v1_features import ExtractionV1Features
+    from features_extraction.hist_remover_features import HistRemoverFeatures
+    from features_extraction.regular_features import RegularFeatures
+
+    CLASSIFIERS = [XGBoostNotScaled(), XGBoostScaled(), RFScaled(), TabNetScaled()]
+    DATASETS = Track.DATASETS_NAMES[::-1]
+    ANNO_LEVELS = Track.ANNO_LEVELS
+    FEATURES_EXTRACTORS = [ExtractionV1Features(), HistRemoverFeatures(), RegularFeatures()]
+
+    classifier = CLASSIFIERS[0]
+    track = Track(DATASETS[0], ANNO_LEVELS[0], FEATURES_EXTRACTORS[0])
+    track.train_classifier_and_save_training_results(classifier=classifier)
+
+    track = Track(DATASETS[0], ANNO_LEVELS[0], FEATURES_EXTRACTORS[1])
+    track.train_classifier_and_save_training_results(classifier=classifier)
+
+    track = Track(DATASETS[0], ANNO_LEVELS[0], FEATURES_EXTRACTORS[2])
+    track.train_classifier_and_save_training_results(classifier=classifier)
+
+    # for classifier in CLASSIFIERS:
+    #     for dataset in DATASETS:
+    #         for level in ANNO_LEVELS:
+    #             for fe in FEATURES_EXTRACTORS:
+    #                 if level == Track.ANNO_LEVELS[1] and dataset != Track.DATASETS_NAMES[2]:
+    #                     continue
+    #                 print(dataset, level, fe.__class__.__name__, classifier.__class__.__name__)
+    #                 track = Track(dataset, level, fe)
+    #                 track.train_classifier_and_save_training_results(classifier=classifier)
 
 
 if __name__ == "__main__":
