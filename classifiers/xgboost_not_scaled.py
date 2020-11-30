@@ -8,7 +8,7 @@ class XGBoostNotScaled(ABSClassifier):
         self.clf = XGBClassifier()
         self.is_trained = False
 
-    def train(self, X_train, X_val, y_train, y_val):
+    def train(self, X_train, y_train, X_val=None, y_val=None):
         self.clf.fit(X_train, y_train)
         self.is_trained = True
 

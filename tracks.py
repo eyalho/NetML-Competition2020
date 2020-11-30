@@ -124,7 +124,7 @@ class Track:
 
         print("Training the model ...")
 
-        classifier.train(X_train, X_val, y_train, y_val)
+        classifier.train(X_train, y_train, X_val, y_val)
 
         # Create folder for the results
         time_ = t.strftime("%Y%m%top_from_fine-%H%M%S")

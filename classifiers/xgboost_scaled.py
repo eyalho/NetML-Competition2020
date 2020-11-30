@@ -10,7 +10,7 @@ class XGBoostScaled(ABSClassifier):
 
         self.is_trained = False
 
-    def train(self, X_train, X_val, y_train, y_val):
+    def train(self, X_train, y_train, X_val=None, y_val=None):
         X_train_scaled = self.scaler.fit_transform(X_train)
         self.clf.fit(X_train_scaled, y_train)
         self.is_trained = True
