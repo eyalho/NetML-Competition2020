@@ -284,6 +284,7 @@ def plot_confusion_matrix(directory, y_true, y_pred, classes, normalize=False, t
         mAP = np.mean(np.asarray([(metrics.average_precision_score(one_hot(y_true, n_classes)[:,c], one_hot(y_pred, n_classes)[:,c], average="weighted")) for c in range(cm.shape[0])]))
         print("F1: \t\t\t{:.5f}".format(F1_))
         print("mAP: \t\t\t{:.5f}".format(mAP))
+        print("F1*mAP: \t\t\t{:.5f}".format(F1_*mAP))
         if not title:
             if normalize:
                 title = 'Normalized confusion matrix\nF1:{:5f} - mAP:{:.5f}'.format(F1_, mAP)

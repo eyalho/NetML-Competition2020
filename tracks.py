@@ -171,30 +171,39 @@ def main():
     from features_extraction.extraction_v1_features import ExtractionV1Features
     from features_extraction.hist_remover_features import HistRemoverFeatures
     from features_extraction.regular_features import RegularFeatures
+    from classifiers.xgboost_load_fine_for_mid import LoadFineForMidScaled
+    from classifiers.xgboost_load_fine_for_top import LoadFineForTopScaled
 
-    CLASSIFIERS = [XGBoostScaled, RFScaled, TabNetScaled]
+    CLASSIFIERS = [LoadFineForMidScaled, LoadFineForTopScaled, XGBoostScaled, RFScaled, TabNetScaled]
     DATASETS = Track.DATASETS_NAMES
     ANNO_LEVELS = Track.ANNO_LEVELS
     FEATURES_EXTRACTORS = [HistRemoverFeatures(), ExtractionV1Features()]
-
-    for classifier in CLASSIFIERS:
-        for fe in FEATURES_EXTRACTORS:
-            for dataset in DATASETS[::-1]:
-                for level in ANNO_LEVELS:
-                    if level == Track.ANNO_LEVELS[1] and dataset != Track.DATASETS_NAMES[2]:
-                        continue
-                    print(dataset, level, fe.__class__.__name__, classifier.__name__)
-                    try:
-                        track = Track(dataset, level, fe)
-                        track.train_classifier_and_save_training_results(classifier=classifier(), use_val=False)
-                    except Exception:
-                        import traceback
-                        track = traceback.format_exc()
-                        print("Catch exception", track)
-                    except:
-                        import traceback
-                        track = traceback.format_exc()
-                        print("ERRORRRRRRRRRR", track)
+    dataset = "vpn2016"
+    level = "mid"
+    fe = HistRemoverFeatures()
+    classifier = LoadFineForMidScaled
+    track = Track(dataset, level, fe)
+    track.train_classifier_and_save_training_results(classifier=classifier(), use_val=False)
+    #
+    # for classifier in CLASSIFIERS:
+    #     for fe in FEATURES_EXTRACTORS:
+    #         for dataset in DATASETS[::-1]:
+    #             for level in ANNO_LEVELS:
+    #                 if level == Track.ANNO_LEVELS[1] and dataset != Track.DATASETS_NAMES[2]:
+    #                     continue
+    #                 print(dataset, level, fe.__class__.__name__, classifier.__name__)
+    #                 try:
+    #                     track = Track(dataset, level, fe)
+    #                     track.train_classifier_and_save_training_results(classifier=classifier(), use_val=False)
+    #                 except Exception:
+    #                     import traceback
+    #                     track = traceback.format_exc()
+    #                     print("Catch exception", track)
+    #                 except:
+    #                     import traceback
+    #                     track = traceback.format_exc()
+    #                     print("ERRORRRRRRRRRR", track)
+    #
 
 
 if __name__ == "__main__":
