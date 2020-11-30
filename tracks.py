@@ -3,6 +3,7 @@ import os
 import time as t
 from collections import Counter
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -14,7 +15,7 @@ from utils.helper import make_submission, plot_confusion_matrix, read_dataset
 logging.basicConfig(level=logging.INFO, filename="records.log")
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(message)s',
-                    datefmt='%m-%d %H:%M',
+                    datefmt='%m-%top_from_fine %H:%M',
                     filename="records.log")
 
 
@@ -82,12 +83,12 @@ class Track:
     def get_training_data(self):
         return self.Xtrain, self.ytrain, self.class_label_pair, self.Xtrain_ids
 
-    def submit_test_std(self, classifier, save_dir):
-        self._submit(classifier, self.test_set, self.class_label_pair, save_dir + "/submission_test-std.json")
+    def submit_test_std(self, classifier, save_dir, time_):
+        self._submit(classifier, self.test_set, self.class_label_pair, save_dir + f"/{time_}_submission_test-std.json")
 
-    def submit_test_challenge(self, classifier, save_dir):
+    def submit_test_challenge(self, classifier, save_dir, time_):
         self._submit(classifier, self.challenge_set, self.class_label_pair,
-                     save_dir + "/submission_test-challenge.json")
+                     save_dir + f"/{time_}_submission_test-challenge.json")
 
     def _submit(self, classifier, test_set, class_label_pair, filepath):
         print("Predicting on {} ...".format(test_set.split('/')[-1]))
@@ -110,19 +111,23 @@ class Track:
 
         return Xtest, ids
 
-    def train_classifier_and_save_training_results(self, classifier: ABSClassifier):
+    def train_classifier_and_save_training_results(self, classifier: ABSClassifier, use_val=True):
 
-        # Split validation set from training data
-        X_train, X_val, y_train, y_val = train_test_split(self.Xtrain, self.ytrain,
-                                                          test_size=0.2,
-                                                          random_state=42,
-                                                          stratify=self.ytrain)
+        if use_val:
+            # Split validation set from training data
+            X_train, X_val, y_train, y_val = train_test_split(self.Xtrain, self.ytrain,
+                                                              test_size=0.2,
+                                                              random_state=42,
+                                                              stratify=self.ytrain)
+        else:
+            X_train, X_val, y_train, y_val = self.Xtrain, self.Xtrain, self.ytrain, self.ytrain
+
         print("Training the model ...")
 
         classifier.train(X_train, X_val, y_train, y_val)
 
         # Create folder for the results
-        time_ = t.strftime("%Y%m%d-%H%M%S")
+        time_ = t.strftime("%Y%m%top_from_fine-%H%M%S")
         save_dir = os.path.join(os.getcwd(), 'results', f"_{self.dataset_name}_{self.anno_level}",
                                 f"{classifier.__class__.__name__}_{time_}")
         os.makedirs(save_dir)
@@ -136,16 +141,19 @@ class Track:
         print("ax.title", ax.title)
         exp_signature = f"{self.dataset_name}, {self.anno_level}, {self.features_extraction.__class__.__name__}," \
                         f" {classifier.__class__.__name__}"
+        if use_val:
+            logging.info(f"{exp_signature}::result::{ax.title}")
+            logging.info(
+                f"{exp_signature}::features ({len(list(self.training_df.columns))}):: {list(self.training_df.columns)}")
+            with open(os.path.join(save_dir, "score.txt"), 'w') as f:
+                f.write(f"{exp_signature}::result::{ax.title}")
+        try:
+            joblib.dump(classifier.clf, os.path.join(save_dir, "pima.joblib.dat"))
+        except Exception as e:
+            print(e)
 
-        logging.info(f"{exp_signature}::result::{ax.title}")
-        logging.info(
-            f"{exp_signature}::features ({len(list(self.training_df.columns))}):: {list(self.training_df.columns)}")
-
-        with open(os.path.join(save_dir, "score.txt"), 'w') as f:
-            f.write(f"{exp_signature}::result::{ax.title}")
-
-        self.submit_test_std(classifier, save_dir)
-        self.submit_test_challenge(classifier, save_dir)
+        self.submit_test_std(classifier, save_dir, time_)
+        self.submit_test_challenge(classifier, save_dir, time_)
 
     def plot_single_feature_distribution(self):
         pass
@@ -164,30 +172,29 @@ def main():
     from features_extraction.hist_remover_features import HistRemoverFeatures
     from features_extraction.regular_features import RegularFeatures
 
-    CLASSIFIERS = [XGBoostNotScaled(), XGBoostScaled(), RFScaled(), TabNetScaled()]
-    DATASETS = Track.DATASETS_NAMES[::-1]
+    CLASSIFIERS = [XGBoostScaled, RFScaled, TabNetScaled]
+    DATASETS = Track.DATASETS_NAMES
     ANNO_LEVELS = Track.ANNO_LEVELS
-    FEATURES_EXTRACTORS = [ExtractionV1Features(), HistRemoverFeatures(), RegularFeatures()]
+    FEATURES_EXTRACTORS = [HistRemoverFeatures(), ExtractionV1Features()]
 
-    classifier = CLASSIFIERS[0]
-    track = Track(DATASETS[0], ANNO_LEVELS[0], FEATURES_EXTRACTORS[0])
-    track.train_classifier_and_save_training_results(classifier=classifier)
-
-    track = Track(DATASETS[0], ANNO_LEVELS[0], FEATURES_EXTRACTORS[1])
-    track.train_classifier_and_save_training_results(classifier=classifier)
-
-    track = Track(DATASETS[0], ANNO_LEVELS[0], FEATURES_EXTRACTORS[2])
-    track.train_classifier_and_save_training_results(classifier=classifier)
-
-    # for classifier in CLASSIFIERS:
-    #     for dataset in DATASETS:
-    #         for level in ANNO_LEVELS:
-    #             for fe in FEATURES_EXTRACTORS:
-    #                 if level == Track.ANNO_LEVELS[1] and dataset != Track.DATASETS_NAMES[2]:
-    #                     continue
-    #                 print(dataset, level, fe.__class__.__name__, classifier.__class__.__name__)
-    #                 track = Track(dataset, level, fe)
-    #                 track.train_classifier_and_save_training_results(classifier=classifier)
+    for classifier in CLASSIFIERS:
+        for fe in FEATURES_EXTRACTORS:
+            for dataset in DATASETS[::-1]:
+                for level in ANNO_LEVELS:
+                    if level == Track.ANNO_LEVELS[1] and dataset != Track.DATASETS_NAMES[2]:
+                        continue
+                    print(dataset, level, fe.__class__.__name__, classifier.__name__)
+                    try:
+                        track = Track(dataset, level, fe)
+                        track.train_classifier_and_save_training_results(classifier=classifier(), use_val=False)
+                    except Exception:
+                        import traceback
+                        track = traceback.format_exc()
+                        print("Catch exception", track)
+                    except:
+                        import traceback
+                        track = traceback.format_exc()
+                        print("ERRORRRRRRRRRR", track)
 
 
 if __name__ == "__main__":
